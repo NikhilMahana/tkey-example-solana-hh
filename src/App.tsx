@@ -8,9 +8,9 @@ import TorusServiceProvider from "@tkey/service-provider-torus";
 import TorusStorageLayer from "@tkey/storage-layer-torus";
 import SecurityQuestionsModule from "@tkey/security-questions";
 import ShareTransferModule from "@tkey/share-transfer";
-import Container from "react-bootstrap/Container";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
+import swal from "sweetalert";
 
 const GOOGLE = "google";
 const FACEBOOK = "facebook";
@@ -95,30 +95,28 @@ const directParams = {
 };
 const serviceProvider = new TorusServiceProvider({ directParams });
 
-function App() {
-  const [tKey, setTKey] = useState<ThresholdKey | null>(null);
+// 1. Initializing tKey
+const webStorageModule = new WebStorageModule();
+const securityQuestionsModule = new SecurityQuestionsModule();
+const shareTransferModule = new ShareTransferModule();
+const storageLayer = new TorusStorageLayer({ hostUrl: "https://metadata.tor.us" });
+
+// Creating the ThresholdKey instance
+const tKey = new ThresholdKey({
+  serviceProvider: serviceProvider,
+  storageLayer,
+  modules: { webStorage: webStorageModule, securityQuestions: securityQuestionsModule, shareTransfer: shareTransferModule },
+});
+
+const App = function App() {
   const [authVerifier, setAuthVerifier] = useState<string>("google");
+  const [consoleText, setConsoleText] = useState<Record<string, any>>({ Output: "Output will appear here" } as Record<string, any>);
 
   useEffect(() => {
     const init = async () => {
+      // Init Service Provider
+      await (tKey.serviceProvider as TorusServiceProvider).init({ skipSw: false });
       try {
-        // Init Service Provider
-        await serviceProvider.init({ skipSw: false });
-
-        // 1. Initializing tKey
-        const webStorageModule = new WebStorageModule();
-        const securityQuestionsModule = new SecurityQuestionsModule();
-        const shareTransferModule = new ShareTransferModule();
-        const storageLayer = new TorusStorageLayer({ hostUrl: "https://metadata.tor.us" });
-
-        // Creating the ThresholdKey instance
-        const tkey = new ThresholdKey({
-          serviceProvider: serviceProvider,
-          storageLayer,
-          modules: { webStorage: webStorageModule, securityQuestions: securityQuestionsModule, shareTransfer: shareTransferModule },
-        });
-
-        setTKey(tkey);
       } catch (error) {
         console.error(error);
       }
@@ -129,54 +127,48 @@ function App() {
 
   const initializeAndReconstruct = async () => {
     try {
+      let consoleTextCopy: Record<string, any> = {};
       if (tKey === null) {
         return;
       }
-      const initializedDetails = await tKey.initialize();
-      console.log(initializedDetails);
-      let shareDesc = Object.assign({}, initializedDetails.shareDescriptions);
-      Object.keys(shareDesc).map((el) => {
-        shareDesc[el] = shareDesc[el].map((jl) => {
-          return JSON.parse(jl);
-        });
+      const details = await tKey.initialize();
+      let shareDescriptions: any = Object.assign({}, details.shareDescriptions);
+      Object.keys(shareDescriptions).map((key) => {
+        shareDescriptions[key] = shareDescriptions[key].map((it: any) => JSON.parse(it));
       });
 
-      // Check different types of shares from metadata. This helps in making UI decisions (About what kind of shares to ask from users)
-      // Sort the share descriptions with priority order
-      let priorityOrder = ["webStorage", "securityQuestions"];
-
-      console.log("ShareDesc", shareDesc);
-      let tempSD = Object.values(shareDesc)
+      let priority = ["webStorage", "securityQuestions"];
+      shareDescriptions = Object.values(shareDescriptions)
         .flatMap((x) => x)
-        .sort((a, b) => {
-          return priorityOrder.indexOf(a) - priorityOrder.indexOf(b);
-        });
-      let requiredShares = initializedDetails.requiredShares;
-      if (tempSD.length === 0 && requiredShares > 0) {
-        throw new Error("No share descriptions available. New key assign might be required or contact support");
+        .sort((a, b) => priority.indexOf((a as any).module) - priority.indexOf((b as any).module));
+
+      let requiredShares = details.requiredShares;
+      if (shareDescriptions.length === 0 && requiredShares > 0) {
+        throw new Error("No share descriptions available. New key assign might be required or contact support.");
       }
-      while (requiredShares > 0 && tempSD.length > 0) {
-        let currentPriority = tempSD.shift();
-        if (currentPriority && currentPriority === "webStorage") {
+
+      while (requiredShares > 0 && shareDescriptions.length > 0) {
+        let curr = shareDescriptions.shift();
+        if (curr.module === "webStorage") {
           try {
+            tKey._initializeNewKey();
             await (tKey.modules.webStorage as WebStorageModule).inputShareFromWebStorage();
             requiredShares--;
           } catch (err) {
-            console.log("Couldn't find on device share");
+            console.log("Couldn't find on device share.", err);
           }
-        } else if (currentPriority === "securityQuestions") {
-          // default to password for now
-          throw "Password required";
+        } else if (curr.module === "securityQuestions") {
+          throw new Error("Password required");
         }
 
-        if (tempSD.length === 0 && requiredShares > 0) {
-          throw "new key assign required";
+        if (shareDescriptions.length === 0 && requiredShares > 0) {
+          throw new Error("New key assign is required.");
         }
       }
+
       const key = await tKey.reconstructKey();
-      console.log(key.privKey.toString("hex"));
-      console.log(key);
-      // this.console(initializedDetails);
+      consoleTextCopy.privKey = key.privKey.toString("hex");
+      setConsoleText(consoleTextCopy);
     } catch (error) {
       console.error(error, "caught");
     }
@@ -192,17 +184,118 @@ function App() {
       const { typeOfLogin, clientId, verifier } = verifierMap[authVerifier];
 
       // 3. Trigger Login ==> opens the popup
-      await (tKey!.serviceProvider as TorusServiceProvider).triggerLogin({
+      const loginResponse = await (tKey.serviceProvider as TorusServiceProvider).triggerLogin({
         typeOfLogin,
         verifier,
         clientId,
         jwtParams,
       });
 
-      // 4. Initialize and reconstruct key
-      await initializeAndReconstruct();
+      setConsoleText(loginResponse);
     } catch (error) {
       console.log(error);
+    }
+  };
+
+  const initializeNewKey = async () => {
+    try {
+      await triggerLogin();
+      await tKey.initialize();
+      const res = await tKey._initializeNewKey({ initializeModules: true });
+      setConsoleText(res);
+    } catch (error) {
+      console.error(error, "caught");
+    }
+  };
+
+  const reconstructKey = async () => {
+    try {
+      console.log("Reconstructing Key");
+      let reconstructedKey = await tKey.reconstructKey();
+      setConsoleText({ ReconstructedKey: reconstructedKey } as Record<string, any>);
+    } catch (error) {
+      console.error(error, "caught");
+    }
+  };
+
+  const getTKeyDetails = async () => {
+    setConsoleText(tKey.getKeyDetails());
+  };
+
+  const generateNewShareWithPassword = async () => {
+    swal("Enter password (>10 characters)", {
+      content: "input" as any,
+    }).then(async (value) => {
+      if (value.length > 10) {
+        await (tKey.modules.securityQuestions as SecurityQuestionsModule).generateNewShareWithSecurityQuestions(value, "whats your password?");
+      } else {
+        swal("Error", "Password must be > 10 characters", "error");
+      }
+    });
+    await getTKeyDetails();
+  };
+
+  const inputShareFromSecurityQuestions = async () => {
+    swal("What is your password ?", {
+      content: "input" as any,
+    }).then(async (value) => {
+      if (value.length > 10) {
+        const resp = await (tKey.modules.securityQuestions as SecurityQuestionsModule).inputShareFromSecurityQuestions(value);
+      } else {
+        swal("Error", "Password must be > 10 characters", "error");
+      }
+    });
+    await getTKeyDetails();
+  };
+
+  const checkShareRequests = async () => {
+    try {
+      const result = await (tKey.modules.shareTransfer as ShareTransferModule).getShareTransferStore();
+      const requests = await (tKey.modules.shareTransfer as ShareTransferModule).lookForRequests();
+      setConsoleText({ RESULT: result, REQUESTS: requests });
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const resetShareRequests = async () => {
+    try {
+      const res = await (tKey.modules.shareTransfer as ShareTransferModule).resetShareTransferStore();
+      console.log(res);
+      setConsoleText({ RESULT: "Share transfer successful" });
+    } catch (err) {
+      console.log(err);
+    }
+  };
+
+  const requestShare = async () => {
+    try {
+      const result = await (tKey.modules.shareTransfer as ShareTransferModule).requestNewShare(navigator.userAgent, tKey.getCurrentShareIndexes());
+      setConsoleText({ RESULT: result });
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const approveShareRequest = async () => {
+    try {
+      const result = await (tKey.modules.shareTransfer as ShareTransferModule).getShareTransferStore();
+      const requests = await (tKey.modules.shareTransfer as ShareTransferModule).lookForRequests();
+      let shareToShare;
+      try {
+        shareToShare = await (tKey.modules.webStorage as WebStorageModule).getDeviceShare();
+      } catch (err) {
+        console.error("No on device share found. Generating a new share");
+        const newShare = await tKey.generateNewShare();
+        shareToShare = newShare.newShareStores[newShare.newShareIndex.toString("hex")];
+      }
+      console.log(result, requests, tKey);
+
+      await (tKey.modules.shareTransfer as ShareTransferModule).approveRequest(requests[0], shareToShare);
+      // await this.tbsdk.modules.shareTransfer.deleteShareTransferStore(requests[0]) // delete old share requests
+      setConsoleText({ RESULT: "approved" });
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -212,29 +305,35 @@ function App() {
         <img src="https://web3auth.io/images/web3auth-logo---Dark-1.svg" alt="Web3 Auth Logo" />
       </div>
       <div className="showcase-content">
-        <h1>Select Verifier</h1>
-        <ul>
-          <li>
-            <span onClick={() => setAuthVerifier("facebook")}>
-              <i className={"fa fa-facebook " + (authVerifier === "facebook" ? "selected" : "")}></i>
-            </span>
-          </li>
-          <li>
-            <span onClick={() => setAuthVerifier("twitter")}>
-              <i className={"fa fa-twitter " + (authVerifier === "twitter" ? "selected" : "")}></i>
-            </span>
-          </li>
-          <li>
-            <span onClick={() => setAuthVerifier("linkedin")}>
-              <i className={"fa fa-linkedin " + (authVerifier === "linkedin" ? "selected" : "")}></i>
-            </span>
-          </li>
-          <li>
-            <span onClick={() => setAuthVerifier("google")}>
-              <i className={"fa fa-google " + (authVerifier === "google" ? "selected" : "")}></i>
-            </span>
-          </li>
-        </ul>
+        <Row className="center">
+          <Col>
+            <h4>Select Verifier</h4>
+          </Col>
+          <Col>
+            <ul>
+              <li>
+                <span onClick={() => setAuthVerifier("facebook")}>
+                  <i className={"fa fa-facebook " + (authVerifier === "facebook" ? "selected" : "")}></i>
+                </span>
+              </li>
+              <li>
+                <span onClick={() => setAuthVerifier("twitter")}>
+                  <i className={"fa fa-twitter " + (authVerifier === "twitter" ? "selected" : "")}></i>
+                </span>
+              </li>
+              <li>
+                <span onClick={() => setAuthVerifier("linkedin")}>
+                  <i className={"fa fa-linkedin " + (authVerifier === "linkedin" ? "selected" : "")}></i>
+                </span>
+              </li>
+              <li>
+                <span onClick={() => setAuthVerifier("google")}>
+                  <i className={"fa fa-google " + (authVerifier === "google" ? "selected" : "")}></i>
+                </span>
+              </li>
+            </ul>
+          </Col>
+        </Row>
         <Row className="frame">
           <Col>
             <Row>
@@ -243,18 +342,24 @@ function App() {
               </Col>
             </Row>
             <Row>
-              <Col className="custom-btn" onClick={() => alert("heel")}>
+              <Col className="custom-btn" onClick={triggerLogin}>
                 Login With tKey
               </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Reconstruct tKey</Col>
+              <Col className="custom-btn" onClick={initializeNewKey}>
+                Create New Key
+              </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Get tKey Details</Col>
+              <Col className="custom-btn" onClick={reconstructKey}>
+                Reconstruct tKey
+              </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Get tKey Object</Col>
+              <Col className="custom-btn" onClick={getTKeyDetails}>
+                Get tKey Details
+              </Col>
             </Row>
           </Col>
           <Col>
@@ -274,10 +379,14 @@ function App() {
               </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Create a new password</Col>
+              <Col className="custom-btn" onClick={generateNewShareWithPassword}>
+                Create a new password
+              </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Input password share</Col>
+              <Col className="custom-btn" onClick={inputShareFromSecurityQuestions}>
+                Input password share
+              </Col>
             </Row>
           </Col>
           <Col>
@@ -287,22 +396,32 @@ function App() {
               </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Check Share requests</Col>
+              <Col className="custom-btn" onClick={checkShareRequests}>
+                Check Share requests
+              </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Request Share</Col>
+              <Col className="custom-btn" onClick={requestShare}>
+                Request Share
+              </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Approve Request</Col>
+              <Col className="custom-btn" onClick={approveShareRequest}>
+                Approve Request
+              </Col>
             </Row>
             <Row>
-              <Col className="custom-btn">Reset Share Request</Col>
+              <Col className="custom-btn" onClick={resetShareRequests}>
+                Reset Share Request
+              </Col>
             </Row>
           </Col>
         </Row>
+        <h1>Console</h1>
+        <textarea style={{ width: "100%", height: "20vh" }} value={JSON.stringify(consoleText)} readOnly></textarea>
       </div>
     </div>
   );
-}
+};
 
 export default App;

@@ -93,7 +93,7 @@ img {
 	justify-content: center;
 	align-items: center;
 	text-align: center;
-	margin-top: 5vh;
+	margin-top: 1rem;
 }
 
 .showcase-content h1 {
@@ -441,8 +441,8 @@ ul {
 
 ul li span {
   position: relative;
-  width: 80px;
-  height: 80px;
+  width: 40px;
+  height: 40px;
   display: block;
   text-align: center;
   margin: 0 10px;
@@ -451,7 +451,7 @@ ul li span {
   text-decoration: none;
   box-shadow: 0 10px 15px rgba(0,0,0,0.3);
   transition: 0.5s;
-  padding: 8px;
+  padding: 2px;
   background: linear-gradient(0deg, #ddd, #fff);
 }
 ul li span:hover {
@@ -465,7 +465,7 @@ ul li span .fa {
   background: linear-gradient(0deg, #fff, #ddd);
 
   border-radius: 50%;
-  line-height: calc(80px - 16px);
+  line-height: calc(40px - 2px);
   font-size: 24px;
   color: #262626;
   transition: 0.5s;
@@ -477,7 +477,7 @@ ul li span .fa {
 
 .frame {
   width: 100%;
-  margin: 10vh auto;
+  margin: 7vh auto;
   text-align: center;
 }
 button {
@@ -535,4 +535,7 @@ button {
 }
 .row{
   margin-right: 5%;
+}
+.center {
+  align-items: center;
 }
