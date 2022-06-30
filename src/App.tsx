@@ -11,6 +11,7 @@ import ShareTransferModule from "@tkey/share-transfer";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
 import swal from "sweetalert";
+import { debug } from "console";
 
 const GOOGLE = "google";
 const FACEBOOK = "facebook";
@@ -110,7 +111,12 @@ const tKey = new ThresholdKey({
 
 const App = function App() {
   const [authVerifier, setAuthVerifier] = useState<string>("google");
-  const [consoleText, setConsoleText] = useState<Record<string, any>>({ Output: "Output will appear here" } as Record<string, any>);
+  const [consoleText, setConsoleText] = useState<any>("Output will appear here");
+
+  const appendConsoleText = (el: any) => {
+    const data = (typeof el === "string") ? el : JSON.stringify(el)
+    setConsoleText((x:any) => x + "\n" + data);
+  }
 
   useEffect(() => {
     const init = async () => {
@@ -191,7 +197,7 @@ const App = function App() {
         jwtParams,
       });
 
-      setConsoleText(loginResponse);
+      // setConsoleText(loginResponse);
     } catch (error) {
       console.log(error);
     }
@@ -199,27 +205,51 @@ const App = function App() {
 
   const initializeNewKey = async () => {
     try {
+      setConsoleText("Initializing a new key");
       await triggerLogin();
       await tKey.initialize();
       const res = await tKey._initializeNewKey({ initializeModules: true });
-      setConsoleText(res);
+      console.log("response from _initializeNewKey", res)
+      appendConsoleText(res.privKey);
     } catch (error) {
       console.error(error, "caught");
     }
   };
 
+  const loginUsingLocalShare = async () => {
+    try {
+      setConsoleText("Logging in");
+      await triggerLogin();
+      await tKey.initialize();
+
+      appendConsoleText("Adding local webstorage share")
+      const webStorageModule = tKey.modules["webStorage"] as WebStorageModule;
+      await webStorageModule.inputShareFromWebStorage()
+
+      const indexes = tKey.getCurrentShareIndexes()
+      appendConsoleText("Total number of available shares: " + indexes.length);
+
+      const reconstructedKey = await tKey.reconstructKey();
+      appendConsoleText("tkey: " + reconstructedKey.privKey.toString("hex"))
+    } catch (error) {
+      console.error(error, "caught");
+    }
+  }
+
   const reconstructKey = async () => {
     try {
       console.log("Reconstructing Key");
+      setConsoleText("Reconstucting key");
       let reconstructedKey = await tKey.reconstructKey();
-      setConsoleText({ ReconstructedKey: reconstructedKey } as Record<string, any>);
+      appendConsoleText(reconstructedKey)
     } catch (error) {
       console.error(error, "caught");
     }
   };
 
   const getTKeyDetails = async () => {
-    setConsoleText(tKey.getKeyDetails());
+    setConsoleText("Tkey details")
+    appendConsoleText(tKey.getKeyDetails());
   };
 
   const generateNewShareWithPassword = async () => {
@@ -342,13 +372,13 @@ const App = function App() {
               </Col>
             </Row>
             <Row>
-              <Col className="custom-btn" onClick={triggerLogin}>
-                Login With tKey
+              <Col className="custom-btn" onClick={loginUsingLocalShare}>
+                Login
               </Col>
             </Row>
             <Row>
               <Col className="custom-btn" onClick={initializeNewKey}>
-                Create New Key
+                Create New tKey
               </Col>
             </Row>
             <Row>
@@ -418,7 +448,7 @@ const App = function App() {
           </Col>
         </Row>
         <h1>Console</h1>
-        <textarea style={{ width: "100%", height: "20vh" }} value={JSON.stringify(consoleText)} readOnly></textarea>
+        <textarea style={{ width: "100%", height: "20vh" }} value={consoleText} readOnly></textarea>
       </div>
     </div>
   );
