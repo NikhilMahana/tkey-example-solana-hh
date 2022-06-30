@@ -114,9 +114,9 @@ const App = function App() {
   const [consoleText, setConsoleText] = useState<any>("Output will appear here");
 
   const appendConsoleText = (el: any) => {
-    const data = (typeof el === "string") ? el : JSON.stringify(el)
-    setConsoleText((x:any) => x + "\n" + data);
-  }
+    const data = typeof el === "string" ? el : JSON.stringify(el);
+    setConsoleText((x: any) => x + "\n" + data);
+  };
 
   useEffect(() => {
     const init = async () => {
@@ -209,7 +209,7 @@ const App = function App() {
       await triggerLogin();
       await tKey.initialize();
       const res = await tKey._initializeNewKey({ initializeModules: true });
-      console.log("response from _initializeNewKey", res)
+      console.log("response from _initializeNewKey", res);
       appendConsoleText(res.privKey);
     } catch (error) {
       console.error(error, "caught");
@@ -222,42 +222,44 @@ const App = function App() {
       await triggerLogin();
       await tKey.initialize();
 
-      appendConsoleText("Adding local webstorage share")
+      appendConsoleText("Adding local webstorage share");
       const webStorageModule = tKey.modules["webStorage"] as WebStorageModule;
-      await webStorageModule.inputShareFromWebStorage()
+      await webStorageModule.inputShareFromWebStorage();
 
-      const indexes = tKey.getCurrentShareIndexes()
+      const indexes = tKey.getCurrentShareIndexes();
       appendConsoleText("Total number of available shares: " + indexes.length);
 
       const reconstructedKey = await tKey.reconstructKey();
-      appendConsoleText("tkey: " + reconstructedKey.privKey.toString("hex"))
+      appendConsoleText("tkey: " + reconstructedKey.privKey.toString("hex"));
     } catch (error) {
       console.error(error, "caught");
     }
-  }
+  };
 
   const reconstructKey = async () => {
     try {
       console.log("Reconstructing Key");
       setConsoleText("Reconstucting key");
       let reconstructedKey = await tKey.reconstructKey();
-      appendConsoleText(reconstructedKey)
+      appendConsoleText(reconstructedKey.privKey);
     } catch (error) {
       console.error(error, "caught");
     }
   };
 
   const getTKeyDetails = async () => {
-    setConsoleText("Tkey details")
+    setConsoleText("Tkey details");
     appendConsoleText(tKey.getKeyDetails());
   };
 
   const generateNewShareWithPassword = async () => {
+    setConsoleText("Generating new share with password");
     swal("Enter password (>10 characters)", {
       content: "input" as any,
     }).then(async (value) => {
       if (value.length > 10) {
         await (tKey.modules.securityQuestions as SecurityQuestionsModule).generateNewShareWithSecurityQuestions(value, "whats your password?");
+        appendConsoleText("Successfully generated new share with password.");
       } else {
         swal("Error", "Password must be > 10 characters", "error");
       }
@@ -266,48 +268,55 @@ const App = function App() {
   };
 
   const inputShareFromSecurityQuestions = async () => {
+    setConsoleText("Importing Share from Security Question");
     swal("What is your password ?", {
       content: "input" as any,
     }).then(async (value) => {
       if (value.length > 10) {
-        const resp = await (tKey.modules.securityQuestions as SecurityQuestionsModule).inputShareFromSecurityQuestions(value);
+        await (tKey.modules.securityQuestions as SecurityQuestionsModule).inputShareFromSecurityQuestions(value);
+        appendConsoleText("Imported Share using the security question");
       } else {
         swal("Error", "Password must be > 10 characters", "error");
       }
     });
-    await getTKeyDetails();
   };
 
   const checkShareRequests = async () => {
+    consoleText("Checking Share Reuqests");
     try {
       const result = await (tKey.modules.shareTransfer as ShareTransferModule).getShareTransferStore();
       const requests = await (tKey.modules.shareTransfer as ShareTransferModule).lookForRequests();
-      setConsoleText({ RESULT: result, REQUESTS: requests });
+      appendConsoleText("Share Requests" + JSON.stringify(requests));
+      console.log("Share requests", requests);
+      console.log("Share Transfer Store", result);
     } catch (err) {
       console.log(err);
     }
   };
 
   const resetShareRequests = async () => {
+    setConsoleText("Resetting Share Transfer Requests");
     try {
       const res = await (tKey.modules.shareTransfer as ShareTransferModule).resetShareTransferStore();
       console.log(res);
-      setConsoleText({ RESULT: "Share transfer successful" });
+      appendConsoleText("Reset share transfer successful");
     } catch (err) {
       console.log(err);
     }
   };
 
   const requestShare = async () => {
+    setConsoleText("Requesting New Share");
     try {
       const result = await (tKey.modules.shareTransfer as ShareTransferModule).requestNewShare(navigator.userAgent, tKey.getCurrentShareIndexes());
-      setConsoleText({ RESULT: result });
+      appendConsoleText(result);
     } catch (err) {
       console.error(err);
     }
   };
 
   const approveShareRequest = async () => {
+    setConsoleText("Approving Share Request");
     try {
       const result = await (tKey.modules.shareTransfer as ShareTransferModule).getShareTransferStore();
       const requests = await (tKey.modules.shareTransfer as ShareTransferModule).lookForRequests();
@@ -323,7 +332,7 @@ const App = function App() {
 
       await (tKey.modules.shareTransfer as ShareTransferModule).approveRequest(requests[0], shareToShare);
       // await this.tbsdk.modules.shareTransfer.deleteShareTransferStore(requests[0]) // delete old share requests
-      setConsoleText({ RESULT: "approved" });
+      appendConsoleText("Approved Share Transfer request");
     } catch (err) {
       console.error(err);
     }
