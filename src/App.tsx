@@ -13,36 +13,21 @@ import Col from "react-bootstrap/Col";
 import swal from "sweetalert";
 import { debug } from "console";
 
+declare global {
+  interface Window {
+    secrets: any;
+  }
+}
+
 const GOOGLE = "google";
 const FACEBOOK = "facebook";
-const REDDIT = "reddit";
-const DISCORD = "discord";
-const TWITCH = "twitch";
-const GITHUB = "github";
-const APPLE = "apple";
 const LINKEDIN = "linkedin";
 const TWITTER = "twitter";
-const WEIBO = "weibo";
-const LINE = "line";
-const EMAIL_PASSWORD = "email_password";
-const PASSWORDLESS = "passwordless";
-const HOSTED_EMAIL_PASSWORDLESS = "hosted_email_passwordless";
-const HOSTED_SMS_PASSWORDLESS = "hosted_sms_passwordless";
 const AUTH_DOMAIN = "https://torus-test.auth0.com";
 
-const LOGIN_HINT = "";
-
 const loginConnectionMap: Record<string, any> = {
-  [EMAIL_PASSWORD]: { domain: AUTH_DOMAIN },
-  [PASSWORDLESS]: { domain: AUTH_DOMAIN, login_hint: LOGIN_HINT },
-  [HOSTED_EMAIL_PASSWORDLESS]: { domain: AUTH_DOMAIN, verifierIdField: "name", connection: "", isVerifierIdCaseSensitive: false },
-  [HOSTED_SMS_PASSWORDLESS]: { domain: AUTH_DOMAIN, verifierIdField: "name", connection: "" },
-  [APPLE]: { domain: AUTH_DOMAIN },
-  [GITHUB]: { domain: AUTH_DOMAIN },
   [LINKEDIN]: { domain: AUTH_DOMAIN },
   [TWITTER]: { domain: AUTH_DOMAIN },
-  [WEIBO]: { domain: AUTH_DOMAIN },
-  [LINE]: { domain: AUTH_DOMAIN },
 };
 
 const verifierMap: Record<string, any> = {
@@ -53,39 +38,8 @@ const verifierMap: Record<string, any> = {
     verifier: "web3auth-testnet-verifier",
   },
   [FACEBOOK]: { name: "Facebook", typeOfLogin: "facebook", clientId: "617201755556395", verifier: "facebook-lrc" },
-  [REDDIT]: { name: "Reddit", typeOfLogin: "reddit", clientId: "YNsv1YtA_o66fA", verifier: "torus-reddit-test" },
-  [TWITCH]: { name: "Twitch", typeOfLogin: "twitch", clientId: "f5and8beke76mzutmics0zu4gw10dj", verifier: "twitch-lrc" },
-  [DISCORD]: { name: "Discord", typeOfLogin: "discord", clientId: "682533837464666198", verifier: "discord-lrc" },
-  [EMAIL_PASSWORD]: {
-    name: "Email Password",
-    typeOfLogin: "email_password",
-    clientId: "sqKRBVSdwa4WLkaq419U7Bamlh5vK1H7",
-    verifier: "torus-auth0-email-password",
-  },
-  [PASSWORDLESS]: {
-    name: "Passwordless",
-    typeOfLogin: "passwordless",
-    clientId: "P7PJuBCXIHP41lcyty0NEb7Lgf7Zme8Q",
-    verifier: "torus-auth0-passwordless",
-  },
-  [APPLE]: { name: "Apple", typeOfLogin: "apple", clientId: "m1Q0gvDfOyZsJCZ3cucSQEe9XMvl9d9L", verifier: "torus-auth0-apple-lrc" },
-  [GITHUB]: { name: "Github", typeOfLogin: "github", clientId: "PC2a4tfNRvXbT48t89J5am0oFM21Nxff", verifier: "torus-auth0-github-lrc" },
   [LINKEDIN]: { name: "Linkedin", typeOfLogin: "linkedin", clientId: "59YxSgx79Vl3Wi7tQUBqQTRTxWroTuoc", verifier: "torus-auth0-linkedin-lrc" },
   [TWITTER]: { name: "Twitter", typeOfLogin: "twitter", clientId: "A7H8kkcmyFRlusJQ9dZiqBLraG2yWIsO", verifier: "torus-auth0-twitter-lrc" },
-  [WEIBO]: { name: "Weibo", typeOfLogin: "weibo", clientId: "dhFGlWQMoACOI5oS5A1jFglp772OAWr1", verifier: "torus-auth0-weibo-lrc" },
-  [LINE]: { name: "Line", typeOfLogin: "line", clientId: "WN8bOmXKNRH1Gs8k475glfBP5gDZr9H1", verifier: "torus-auth0-line-lrc" },
-  [HOSTED_EMAIL_PASSWORDLESS]: {
-    name: "Hosted Email Passwordless",
-    typeOfLogin: "jwt",
-    clientId: "P7PJuBCXIHP41lcyty0NEb7Lgf7Zme8Q",
-    verifier: "torus-auth0-passwordless",
-  },
-  [HOSTED_SMS_PASSWORDLESS]: {
-    name: "Hosted SMS Passwordless",
-    typeOfLogin: "jwt",
-    clientId: "nSYBFalV2b1MSg5b2raWqHl63tfH3KQa",
-    verifier: "torus-auth0-sms-passwordless",
-  },
 };
 
 // 1. Setup Service Provider
@@ -96,7 +50,7 @@ const directParams = {
 };
 const serviceProvider = new TorusServiceProvider({ directParams });
 
-// 1. Initializing tKey
+// 2. Initializing tKey
 const webStorageModule = new WebStorageModule();
 const securityQuestionsModule = new SecurityQuestionsModule();
 const shareTransferModule = new ShareTransferModule();
@@ -112,6 +66,10 @@ const tKey = new ThresholdKey({
 const App = function App() {
   const [authVerifier, setAuthVerifier] = useState<string>("google");
   const [consoleText, setConsoleText] = useState<any>("Output will appear here");
+  const [threshold, setThreshold] = useState<any>(2);
+  const [total, setTotal] = useState<any>(3);
+  const [shareDetails, setShareDetails] = useState<string>("");
+  const [shareToggle, setShareToggle] = useState<string>("split");
 
   const appendConsoleText = (el: any) => {
     const data = typeof el === "string" ? el : JSON.stringify(el);
@@ -130,55 +88,6 @@ const App = function App() {
 
     init();
   }, []);
-
-  const initializeAndReconstruct = async () => {
-    try {
-      let consoleTextCopy: Record<string, any> = {};
-      if (tKey === null) {
-        return;
-      }
-      const details = await tKey.initialize();
-      let shareDescriptions: any = Object.assign({}, details.shareDescriptions);
-      Object.keys(shareDescriptions).map((key) => {
-        shareDescriptions[key] = shareDescriptions[key].map((it: any) => JSON.parse(it));
-      });
-
-      let priority = ["webStorage", "securityQuestions"];
-      shareDescriptions = Object.values(shareDescriptions)
-        .flatMap((x) => x)
-        .sort((a, b) => priority.indexOf((a as any).module) - priority.indexOf((b as any).module));
-
-      let requiredShares = details.requiredShares;
-      if (shareDescriptions.length === 0 && requiredShares > 0) {
-        throw new Error("No share descriptions available. New key assign might be required or contact support.");
-      }
-
-      while (requiredShares > 0 && shareDescriptions.length > 0) {
-        let curr = shareDescriptions.shift();
-        if (curr.module === "webStorage") {
-          try {
-            tKey._initializeNewKey();
-            await (tKey.modules.webStorage as WebStorageModule).inputShareFromWebStorage();
-            requiredShares--;
-          } catch (err) {
-            console.log("Couldn't find on device share.", err);
-          }
-        } else if (curr.module === "securityQuestions") {
-          throw new Error("Password required");
-        }
-
-        if (shareDescriptions.length === 0 && requiredShares > 0) {
-          throw new Error("New key assign is required.");
-        }
-      }
-
-      const key = await tKey.reconstructKey();
-      consoleTextCopy.privKey = key.privKey.toString("hex");
-      setConsoleText(consoleTextCopy);
-    } catch (error) {
-      console.error(error, "caught");
-    }
-  };
 
   const triggerLogin = async () => {
     try {
@@ -211,6 +120,7 @@ const App = function App() {
       const res = await tKey._initializeNewKey({ initializeModules: true });
       console.log("response from _initializeNewKey", res);
       appendConsoleText(res.privKey);
+      setShareDetails(JSON.stringify(res.privKey));
     } catch (error) {
       console.error(error, "caught");
     }
@@ -227,8 +137,8 @@ const App = function App() {
       await webStorageModule.inputShareFromWebStorage();
 
       const indexes = tKey.getCurrentShareIndexes();
+      appendConsoleText(indexes);
       appendConsoleText("Total number of available shares: " + indexes.length);
-
       const reconstructedKey = await tKey.reconstructKey();
       appendConsoleText("tkey: " + reconstructedKey.privKey.toString("hex"));
     } catch (error) {
@@ -238,7 +148,6 @@ const App = function App() {
 
   const reconstructKey = async () => {
     try {
-      console.log("Reconstructing Key");
       setConsoleText("Reconstucting key");
       let reconstructedKey = await tKey.reconstructKey();
       appendConsoleText(reconstructedKey.privKey);
@@ -282,7 +191,7 @@ const App = function App() {
   };
 
   const checkShareRequests = async () => {
-    consoleText("Checking Share Reuqests");
+    consoleText("Checking Share Requests");
     try {
       const result = await (tKey.modules.shareTransfer as ShareTransferModule).getShareTransferStore();
       const requests = await (tKey.modules.shareTransfer as ShareTransferModule).lookForRequests();
@@ -336,6 +245,21 @@ const App = function App() {
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const generateShares = () => {
+    if (shareToggle == "split") {
+      setShareToggle("combine");
+    }
+    var shares = window.secrets.share(shareDetails.replaceAll('"', ""), parseInt(total), parseInt(threshold));
+    setShareDetails(shares.join("\n"));
+  };
+  const combineShares = () => {
+    if (shareToggle == "combine") {
+      setShareToggle("split");
+    }
+    var comb = window.secrets.combine(shareDetails.split("\n"));
+    setShareDetails(comb);
   };
 
   return (
@@ -408,14 +332,10 @@ const App = function App() {
               </Col>
             </Row>
             <Row>
-              <Col>
-                <br></br>
-              </Col>
+              <br></br>
             </Row>
             <Row>
-              <Col>
-                <br></br>
-              </Col>
+              <br></br>
             </Row>
             <Row>
               <Col className="custom-btn" onClick={generateNewShareWithPassword}>
@@ -458,6 +378,35 @@ const App = function App() {
         </Row>
         <h1>Console</h1>
         <textarea style={{ width: "100%", height: "20vh" }} value={consoleText} readOnly></textarea>
+        <hr></hr>
+        <h1>Secret Sharing</h1>
+        <Col>
+          <input
+            type="number"
+            value={threshold}
+            onChange={(e) => {
+              setThreshold(e.currentTarget.value);
+            }}
+          />{" "}
+          out of{" "}
+          <input
+            type="number"
+            value={total}
+            onChange={(e) => {
+              setTotal(e.currentTarget.value);
+            }}
+          />
+        </Col>
+        <Row className="frame">
+          <Col className="custom-btn" onClick={generateShares}>
+            Generate Shares
+          </Col>
+          <Col className="custom-btn" onClick={combineShares}>
+            Combine Shares
+          </Col>
+        </Row>
+        {shareToggle == "split" ? <h1>Share Split</h1> : <h1>Combine Shares</h1>}
+        <textarea style={{ width: "100%", height: "20vh" }} value={shareDetails} onChange={(e) => setShareDetails(e.currentTarget.value)}></textarea>
       </div>
     </div>
   );
