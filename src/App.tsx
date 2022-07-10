@@ -66,10 +66,10 @@ const tKey = new ThresholdKey({
 const App = function App() {
   const [authVerifier, setAuthVerifier] = useState<string>("google");
   const [consoleText, setConsoleText] = useState<any>("Output will appear here");
-  const [threshold, setThreshold] = useState<any>(2);
-  const [total, setTotal] = useState<any>(3);
-  const [shareDetails, setShareDetails] = useState<string>("");
+  const [shareDetails, setShareDetails] = useState<string>("0x0");
   const [shareToggle, setShareToggle] = useState<string>("split");
+  const [total, setTotal] = useState<number>(3);
+  const [threshold, setThreshold] = useState<number>(2);
 
   const appendConsoleText = (el: any) => {
     const data = typeof el === "string" ? el : JSON.stringify(el);
@@ -120,6 +120,7 @@ const App = function App() {
       const res = await tKey._initializeNewKey({ initializeModules: true });
       console.log("response from _initializeNewKey", res);
       appendConsoleText(res.privKey);
+      setShareToggle("split");
       setShareDetails(JSON.stringify(res.privKey));
     } catch (error) {
       console.error(error, "caught");
@@ -248,11 +249,18 @@ const App = function App() {
   };
 
   const generateShares = () => {
-    if (shareToggle == "split") {
-      setShareToggle("combine");
+    var re = /[0-9A-Fa-f]*/g;
+    var keyToBeSplit = shareDetails.replaceAll('"', "");
+    if (keyToBeSplit.substring(0, 2) === "0x") {
+      keyToBeSplit = keyToBeSplit.substring(2);
     }
-    var shares = window.secrets.share(shareDetails.replaceAll('"', ""), parseInt(total), parseInt(threshold));
-    setShareDetails(shares.join("\n"));
+    if (re.test(keyToBeSplit)) {
+      setShareToggle("combine");
+      var shares = window.secrets.share(keyToBeSplit, total, threshold);
+      setShareDetails(shares.join("\n"));
+    } else {
+      swal("Please enter a valid hexadecimal number");
+    }
   };
   const combineShares = () => {
     if (shareToggle == "combine") {
@@ -377,15 +385,17 @@ const App = function App() {
           </Col>
         </Row>
         <h1>Console</h1>
-        <textarea style={{ width: "100%", height: "20vh" }} value={consoleText} readOnly></textarea>
+        <textarea style={{ width: "100%", height: "8vh" }} value={consoleText} readOnly></textarea>
         <hr></hr>
         <h1>Secret Sharing</h1>
-        <Col>
+        <div>
           <input
             type="number"
             value={threshold}
             onChange={(e) => {
-              setThreshold(e.currentTarget.value);
+              setThreshold(parseInt(e.target.value));
+              setShareDetails("0x0");
+              setShareToggle("split");
             }}
           />{" "}
           out of{" "}
@@ -393,20 +403,32 @@ const App = function App() {
             type="number"
             value={total}
             onChange={(e) => {
-              setTotal(e.currentTarget.value);
+              setTotal(parseInt(e.target.value));
+              setShareDetails("0x0");
+              setShareToggle("split");
             }}
           />
-        </Col>
-        <Row className="frame">
-          <Col className="custom-btn" onClick={generateShares}>
+        </div>
+        <br></br>
+        {shareToggle === "split" ? <h4> Private key (hex format) below</h4> : <h4>Private Key split into {total} shares</h4>}
+        {shareToggle === "split" ? (
+          <textarea style={{ width: "100%", height: "4vh" }} value={shareDetails} onChange={(e) => setShareDetails(e.currentTarget.value)}></textarea>
+        ) : (
+          <textarea
+            style={{ width: "100%", height: 4 * total + "vh" }}
+            value={shareDetails}
+            onChange={(e) => setShareDetails(e.currentTarget.value)}></textarea>
+        )}
+        <br></br>
+        {shareToggle === "split" ? (
+          <button className="custom-btn" style={{ width: "auto" }} onClick={generateShares}>
             Generate Shares
-          </Col>
-          <Col className="custom-btn" onClick={combineShares}>
+          </button>
+        ) : (
+          <button className="custom-btn" style={{ width: "auto" }} onClick={combineShares}>
             Combine Shares
-          </Col>
-        </Row>
-        {shareToggle == "split" ? <h1>Share Split</h1> : <h1>Combine Shares</h1>}
-        <textarea style={{ width: "100%", height: "20vh" }} value={shareDetails} onChange={(e) => setShareDetails(e.currentTarget.value)}></textarea>
+          </button>
+        )}
       </div>
     </div>
   );

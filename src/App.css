@@ -103,6 +103,13 @@ img {
 	margin: 0 0 2rem;
 }
 
+.showcase-content h4 {
+	font-weight: 700;
+	font-size: 1rem;
+	line-height: 1.1;
+	margin: 0 0 2rem;
+}
+
 .showcase-content p {
 	text-transform: uppercase;
 	color: #fff;
