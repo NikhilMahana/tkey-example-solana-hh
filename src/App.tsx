@@ -10,8 +10,10 @@ import SecurityQuestionsModule from "@tkey/security-questions";
 import ShareTransferModule from "@tkey/share-transfer";
 import Row from "react-bootstrap/Row";
 import Col from "react-bootstrap/Col";
+import Table from "react-bootstrap/Table";
 import swal from "sweetalert";
-import { debug } from "console";
+import { generateMnemonic, mnemonicToSeedSync, validateMnemonic, mnemonicToEntropy } from "bip39";
+import HDKey from "hdkey";
 
 declare global {
   interface Window {
@@ -66,6 +68,16 @@ const tKey = new ThresholdKey({
 const App = function App() {
   const [authVerifier, setAuthVerifier] = useState<string>("google");
   const [consoleText, setConsoleText] = useState<any>("Output will appear here");
+  const [derivedAccount, setDerivedAccount] = useState<any>("Output will appear here");
+  const [mnemonics, setMnemonics] = useState<any>("");
+  const [bip39Seed, setBIP39Seed] = useState<any>("");
+  const [entropy, setEntropy] = useState<any>("");
+  const [hdKey, setHDKey] = useState<any>(null);
+  const [derivationPath, setDerivationPath] = useState<any>("m/44'/60'/0'/0");
+  const [privateKey, setPrivateKey] = useState<any>("");
+  const [publicKey, setPublicKey] = useState<any>("");
+  const [privateExtendedKey, setPrivateExtendedKey] = useState<any>("");
+  const [publicExtendedKey, setPublicExtendedKey] = useState<any>("");
   const [shareDetails, setShareDetails] = useState<string>("0x0");
   const [shareToggle, setShareToggle] = useState<string>("split");
   const [total, setTotal] = useState<number>(3);
@@ -121,7 +133,7 @@ const App = function App() {
       console.log("response from _initializeNewKey", res);
       appendConsoleText(res.privKey);
       setShareToggle("split");
-      setShareDetails(JSON.stringify(res.privKey));
+      setShareDetails(res.privKey.toString("hex"));
     } catch (error) {
       console.error(error, "caught");
     }
@@ -268,6 +280,47 @@ const App = function App() {
     }
     var comb = window.secrets.combine(shareDetails.split("\n"));
     setShareDetails(comb);
+  };
+  const generateMnemonics = () => {
+    if (!validateMnemonic(mnemonics)) {
+      swal("Incorrect Mnemonic", "", "error");
+      setBIP39Seed("Incorrect Mnemonic");
+      setEntropy("Incorrect Mnemonic");
+      setPublicKey("Incorrect Mnemonic");
+      setPublicExtendedKey("Incorrect Mnemonic");
+      setPrivateKey("Incorrect Mnemonic");
+      setPrivateExtendedKey("Incorrect Mnemonic");
+    } else {
+      const bip39Seed = mnemonicToSeedSync(mnemonics).toString("hex");
+      const bip39entropy = mnemonicToEntropy(mnemonics);
+
+      setBIP39Seed(bip39Seed);
+      setEntropy(bip39entropy);
+      const hd = HDKey.fromMasterSeed(Buffer.from(bip39Seed, "hex"));
+      setPublicKey(hd.publicKey.toString("hex"));
+      setPublicExtendedKey(hd.publicExtendedKey);
+      setPrivateKey(hd.privateKey.toString("hex"));
+      setPrivateExtendedKey(hd.privateExtendedKey);
+      setHDKey(hd);
+    }
+  };
+  const deriveAccount = () => {
+    const childHd = hdKey.derive(derivationPath);
+    setDerivedAccount("Private Key " + childHd.privateKey.toString("hex") + "\nPublic Key " + childHd.publicKey.toString("hex"));
+  };
+  const generateMnemonicsRandom = () => {
+    const bipMnemonic = generateMnemonic();
+    const bip39Seed = mnemonicToSeedSync(bipMnemonic).toString("hex");
+    const bip39entropy = mnemonicToEntropy(bipMnemonic);
+    setMnemonics(bipMnemonic);
+    setBIP39Seed(bip39Seed);
+    setEntropy(bip39entropy);
+    const hd = HDKey.fromMasterSeed(Buffer.from(bip39Seed, "hex"));
+    setPublicKey(hd.publicKey.toString("hex"));
+    setPublicExtendedKey(hd.publicExtendedKey);
+    setPrivateKey(hd.privateKey.toString("hex"));
+    setPrivateExtendedKey(hd.privateExtendedKey);
+    setHDKey(hd);
   };
 
   return (
@@ -429,6 +482,78 @@ const App = function App() {
             Combine Shares
           </button>
         )}
+        <br></br>
+        <h1>Mnemonics</h1>
+        {mnemonics.length === 0 ? (
+          <button className="custom-btn" style={{ width: "auto" }} onClick={generateMnemonicsRandom}>
+            Generate Random Mnemonics
+          </button>
+        ) : (
+          <button className="custom-btn" style={{ width: "auto" }} onClick={generateMnemonics}>
+            Generate Using Mnemonic
+          </button>
+        )}
+
+        <Table>
+          <Row>
+            <span style={{ width: "20%" }}>BIP39 Mnemonic</span>
+            <Col>
+              <input
+                style={{ width: "100%" }}
+                value={mnemonics}
+                onChange={(e) => setMnemonics(e.currentTarget.value)}
+                placeholder="Insert Mnemonic or Generate Random Mnemonic"></input>
+            </Col>
+          </Row>
+          <Row>
+            <span style={{ width: "20%" }}>BIP39 Seed</span>
+            <Col>
+              <input style={{ width: "100%" }} value={bip39Seed} readOnly></input>
+            </Col>
+          </Row>
+          <Row>
+            <span style={{ width: "20%" }}>Entropy</span>
+            <Col>
+              <input style={{ width: "100%" }} value={entropy} readOnly></input>
+            </Col>
+          </Row>
+          <Row>
+            <span style={{ width: "20%" }}>Public Key</span>
+            <Col>
+              <input style={{ width: "100%" }} value={publicKey} readOnly></input>
+            </Col>
+          </Row>
+          <Row>
+            <span style={{ width: "20%" }}>Extended Public Key </span>
+            <Col>
+              <input style={{ width: "100%" }} value={publicExtendedKey} readOnly></input>
+            </Col>
+          </Row>
+          <Row>
+            <span style={{ width: "20%" }}>Private Key</span>
+            <Col>
+              <input style={{ width: "100%" }} value={privateKey} readOnly></input>
+            </Col>
+          </Row>
+          <Row>
+            <span style={{ width: "20%" }}>Extended Private Key </span>
+            <Col>
+              <input style={{ width: "100%" }} value={privateExtendedKey} readOnly></input>
+            </Col>
+          </Row>
+          <br></br>
+          <h4>BIP32 Derivation Path</h4>
+          <Col>
+            <input
+              style={{ width: "20%", textAlign: "center" }}
+              value={derivationPath}
+              onChange={(e) => setDerivationPath(e.currentTarget.value)}></input>
+          </Col>
+          <button className="custom-btn" onClick={deriveAccount}>
+            Derive
+          </button>
+          <textarea style={{ width: "100%", height: "8vh" }} value={derivedAccount} readOnly></textarea>
+        </Table>
       </div>
     </div>
   );
